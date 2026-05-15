@@ -194,23 +194,48 @@ window.addEventListener("pointerup", (e) => {
     }
   }
 
-  // ── Curtain open ──
-  // One-way interaction — the curtain can only be opened, not closed.
-  // window._curtain.opened is set to true after the first click so this block
-  // is skipped on all subsequent clicks.
-  if (window._curtain && window._curtain.wrapper && !window._curtain.opened) {
+  // ── Curtain toggle (open / close) ──
+  // First click opens the curtain (plays "Abrindo" forward, stops wind).
+  // Second click closes it (plays "Abrindo" in reverse), then restarts the
+  // wind animation once the close clip finishes.
+  if (window._curtain && window._curtain.wrapper) {
     if (raycaster.intersectObject(window._curtain.wrapper, true).length > 0) {
       if (window._curtain.openClip && window._curtain.mixer) {
-        // Stop wind animation, play open clip once
-        if (window._curtain.windAction) window._curtain.windAction.stop();
         const openAction = window._curtain.mixer.clipAction(
           window._curtain.openClip,
         );
         openAction.setLoop(THREE.LoopOnce, 1);
-        openAction.clampWhenFinished = true; // hold last keyframe after clip ends
-        openAction.reset();
-        openAction.play();
-        window._curtain.opened = true; // prevent re-triggering
+        openAction.clampWhenFinished = true;
+
+        if (!window._curtain.opened) {
+          // ── Open ──
+          if (window._curtain.windAction) window._curtain.windAction.stop();
+          openAction.reset();
+          openAction.timeScale = 1;
+          openAction.play();
+          window._curtain.opened = true;
+        } else {
+          // ── Close ──
+          // Play the open clip backwards from its end to its beginning.
+          openAction.reset();
+          openAction.timeScale = -1;
+          openAction.time = window._curtain.openClip.duration;
+          openAction.play();
+          window._curtain.opened = false;
+
+          // Once the reverse clip finishes, restart the looping wind animation.
+          const onFinished = (e) => {
+            if (e.action === openAction) {
+              window._curtain.mixer.removeEventListener("finished", onFinished);
+              if (window._curtain.windAction) {
+                window._curtain.windAction.reset();
+                window._curtain.windAction.setLoop(THREE.LoopRepeat, Infinity);
+                window._curtain.windAction.play();
+              }
+            }
+          };
+          window._curtain.mixer.addEventListener("finished", onFinished);
+        }
       }
       return;
     }
