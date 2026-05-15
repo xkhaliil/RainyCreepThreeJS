@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import Stats from "stats.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import rainVertexShader from "./shaders/rainVertex.js";
 import rainFragShader from "./shaders/rainFrag.js";
 
@@ -44,17 +44,26 @@ renderer.toneMappingExposure = 0.5;
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
 // --- Post-processing ---
-const composer = new EffectComposer(renderer);
+const _bloomW = Math.floor(window.innerWidth);
+const _bloomH = Math.floor(window.innerHeight);
+const _bloomRT = new THREE.WebGLRenderTarget(_bloomW, _bloomH);
+const composer = new EffectComposer(renderer, _bloomRT);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(
   new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    new THREE.Vector2(_bloomW, _bloomH),
     0.4, // strength — subtle
     0.5, // radius
     0.9, // threshold — only very bright emissives catch bloom
   ),
 );
 composer.addPass(new OutputPass());
+composer.addPass(
+  new SMAAPass(
+    window.innerWidth * renderer.getPixelRatio(),
+    window.innerHeight * renderer.getPixelRatio(),
+  ),
+);
 
 const textureLoader = new THREE.TextureLoader();
 
@@ -385,8 +394,8 @@ const lampLight = new THREE.SpotLight(0xffd97d, 40, 18, Math.PI / 4, 0.4, 1.5);
 lampLight.position.set(0, 2.8, 0);
 lampLight.target.position.set(0, -3, 0); // aim at floor center
 lampLight.castShadow = true;
-lampLight.shadow.mapSize.width = 1024;
-lampLight.shadow.mapSize.height = 1024;
+lampLight.shadow.mapSize.width = 512;
+lampLight.shadow.mapSize.height = 512;
 scene.add(lampLight);
 scene.add(lampLight.target);
 
@@ -954,7 +963,7 @@ gltfLoader.load(
             child.material = new THREE.MeshStandardMaterial({
               color: 0xffdd88,
               emissive: new THREE.Color(0xffaa33),
-              emissiveIntensity: 2.0,
+              emissiveIntensity: 4.0,
               roughness: 0.6,
               metalness: 0.1,
             });
@@ -993,6 +1002,9 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  const rw = Math.floor(window.innerWidth);
+  const rh = Math.floor(window.innerHeight);
+  _bloomRT.setSize(rw, rh);
   composer.setSize(window.innerWidth, window.innerHeight);
 });
 
@@ -1076,7 +1088,7 @@ window.addEventListener("click", (e) => {
       window._deskLamp.on = !window._deskLamp.on;
       window._deskLamp.light.intensity = window._deskLamp.on ? 1.5 : 0;
       window._deskLamp.meshes.forEach((m) => {
-        m.material.emissiveIntensity = window._deskLamp.on ? 2.0 : 0;
+        m.material.emissiveIntensity = window._deskLamp.on ? 4.0 : 0;
       });
       switchSound.currentTime = 0;
       switchSound.play().catch(() => {});
@@ -1313,9 +1325,10 @@ function animate() {
   if (window._computer && window._computer.mixer)
     window._computer.mixer.update(delta);
 
+  requestAnimationFrame(animate);
+
   // Update rain time uniform — all animation runs on GPU
   rainMesh.material.uniforms.uTime.value = clock.elapsedTime;
-  requestAnimationFrame(animate);
   stats.begin();
   composer.render();
   stats.end();
