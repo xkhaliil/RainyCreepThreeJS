@@ -12,5 +12,115 @@ body {
 canvas {
   display: block;
   width: 100vw;
-  height: 100vh;
+  height: 100vh; /* fallback for browsers without dvh */
+  height: 100dvh; /* iOS 16+ / modern: tracks dynamic address-bar height */
+  touch-action: none; /* prevent scroll/zoom hijacking touch on canvas */
+}
+
+/* ---- Loading Screen ---- */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  background: #080810;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  transition: opacity 0.9s ease;
+}
+#loading-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+#loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  font-family: "Courier New", Courier, monospace;
+  color: #fff;
+  text-align: center;
+  padding: 0 24px;
+}
+.loading-title {
+  font-size: clamp(1.6rem, 6vw, 3.2rem);
+  font-weight: 400;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    0 0 18px #ff2ef7,
+    0 0 55px rgba(255, 46, 247, 0.45),
+    0 0 100px rgba(255, 46, 247, 0.2);
+}
+.loading-subtitle {
+  font-size: clamp(0.6rem, 2vw, 0.78rem);
+  letter-spacing: 0.55em;
+  color: #555;
+  text-transform: lowercase;
+}
+.loading-bar-wrap {
+  width: min(300px, 65vw);
+  height: 2px;
+  background: #1a1a28;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+#loading-bar {
+  height: 100%;
+  width: 0%;
+  background: #ff2ef7;
+  box-shadow:
+    0 0 8px #ff2ef7,
+    0 0 22px rgba(255, 46, 247, 0.6);
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+#loading-pct {
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: #444;
+  font-family: "Courier New", Courier, monospace;
+}
+#enter-btn {
+  margin-top: 24px;
+  padding: 12px 40px;
+  background: transparent;
+  border: 1px solid #ff2ef7;
+  color: #ff2ef7;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.7s ease,
+    background 0.25s ease,
+    box-shadow 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+#enter-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+  animation: enter-pulse 2s ease-in-out infinite;
+}
+#enter-btn:hover,
+#enter-btn:focus {
+  background: rgba(255, 46, 247, 0.1);
+  box-shadow: 0 0 24px rgba(255, 46, 247, 0.55);
+  outline: none;
+}
+@keyframes enter-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(255, 46, 247, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 20px #ff2ef7,
+      0 0 42px rgba(255, 46, 247, 0.5);
+  }
 }

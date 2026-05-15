@@ -2,11 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>Rainy Window</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <div id="loading-screen">
+      <div id="loading-content">
+        <div class="loading-title">CREEP RAINY WINDOW</div>
+
+        <div class="loading-bar-wrap">
+          <div id="loading-bar"></div>
+        </div>
+        <div id="loading-pct">0%</div>
+        <button id="enter-btn">&mdash;&thinsp;ENTER&thinsp;&mdash;</button>
+      </div>
+    </div>
     <canvas id="webgl"></canvas>
     <script type="module" src="/src/main.js"></script>
   </body>

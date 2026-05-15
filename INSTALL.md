@@ -23,10 +23,10 @@ Open the URL printed in the terminal (usually `http://localhost:5173`).
 
 ## Other Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Vite dev server with HMR |
-| `npm run build` | Production build to `dist/` |
+| Command           | Description                        |
+| ----------------- | ---------------------------------- |
+| `npm run dev`     | Vite dev server with HMR           |
+| `npm run build`   | Production build to `dist/`        |
 | `npm run preview` | Serve the production build locally |
 
 ## Notes
