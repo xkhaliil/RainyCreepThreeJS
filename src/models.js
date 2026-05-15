@@ -1,31 +1,51 @@
+// models.js
+// Loads every GLTF model asynchronously and places it in the scene.
+// This module has no exports — it works entirely through side effects.
+// Each loaded model is stored on window._xxx so animate.js and controls.js can
+// reference it without creating a direct import dependency on this module.
+//
+// All models follow the same normalisation pattern:
+//   1. Compute the raw bounding box to find the model’s world-space size
+//   2. Scale it to a target world-space size
+//   3. Wrap it in a Group so the pivot is the group origin
+//   4. Centre the inner model inside the group
+//   5. Position the group in world space (snap to floor, wall, etc.)
+
 import * as THREE from "three";
 import { scene, gltfLoader } from "./renderer.js";
-import { winCX, winCY, winH } from "./room.js";
+import { winCX, winCY, winH } from "./room.js"; // needed for curtain placement
 
 // ─────────────────────────────────────────────
 // Ceiling Lamp
 // ─────────────────────────────────────────────
+// Initialise to { wrapper: null } immediately so controls.js can safely check
+// window._ceilingLamp.wrapper before the async load completes.
 window._ceilingLamp = { wrapper: null, on: true };
 gltfLoader.load(
   "/ceiling lamp.glb",
   (gltf) => {
     const inner = gltf.scene;
 
+    // Normalise to 1 unit on its longest axis
     const rawBox = new THREE.Box3().setFromObject(inner);
     const rawSize = rawBox.getSize(new THREE.Vector3());
     const scale = 1 / Math.max(rawSize.x, rawSize.y, rawSize.z);
     inner.scale.setScalar(scale);
-    inner.rotation.y = -2;
+    inner.rotation.y = -2; // slight rotation so cord faces toward the room
 
+    // Wrap and centre
     const wrapper = new THREE.Group();
     wrapper.add(inner);
     const box = new THREE.Box3().setFromObject(wrapper);
     const center = box.getCenter(new THREE.Vector3());
-    inner.position.sub(center);
+    inner.position.sub(center); // move inner so group bbox is centred at origin
 
+    // Hang from the ceiling (y = 3)
     const box2 = new THREE.Box3().setFromObject(wrapper);
-    wrapper.position.set(0, 3 - box2.max.y, 0);
+    wrapper.position.set(0, 3 - box2.max.y, 0); // ceiling centre, x/z = 0
 
+    // Shadow casting disabled — the lamp is small and high up; any shadows it
+    // casts on itself are invisible and the cost isn’t worth it.
     wrapper.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = false;
@@ -33,7 +53,7 @@ gltfLoader.load(
       }
     });
     scene.add(wrapper);
-    window._ceilingLamp.wrapper = wrapper;
+    window._ceilingLamp.wrapper = wrapper; // expose for controls.js raycasting
   },
   undefined,
   (err) => console.error("Ceiling lamp load error:", err),
@@ -81,11 +101,13 @@ gltfLoader.load(
 
 // ─────────────────────────────────────────────
 // Computer
-// Table surface: center (4.48, -1.45, -1.5)
+// Table surface centre: (4.48, -1.45, -1.5) — matches room.js tableTop
 // ─────────────────────────────────────────────
-const deskY = -1.45;
-const deskX = 4.48;
-const deskZ = -1.5;
+// deskY/deskX/deskZ mirror the tableTop position in room.js so the computer
+// sits flush on the surface without needing to import the table geometry.
+const deskY = -1.45; // table surface Y (top face of 0.1-thick top at y=-1.5)
+const deskX = 4.48; // table centre X
+const deskZ = -1.5; // table centre Z
 
 window._computer = { wrapper: null, mixer: null, clip: null };
 gltfLoader.load(
@@ -129,14 +151,14 @@ gltfLoader.load(
       window._computer.clip = gltf.animations[0];
     }
 
-    // SpotLight shining from the screen toward the room
+    // SpotLight to simulate the glow cast by the screen onto the keyboard and desk surface
     const screenSpot = new THREE.SpotLight(
-      0x88ccff,
-      18,
-      6,
-      Math.PI / 6,
-      0.5,
-      2,
+      0x88ccff, // blue-white screen colour
+      18, // intensity — bright enough to cast visible shadows
+      6, // reach
+      Math.PI / 6, // narrow cone
+      0.5, // penumbra soften
+      2, // quadratic decay
     );
     screenSpot.position.set(
       wrapper.position.x - 0.8,
@@ -335,16 +357,16 @@ gltfLoader.load(
     wrapper.position.y = 0.5; // mid-upper height
     wrapper.position.z = -2.7 - box2.max.z + 0.02; // flush against back wall
 
-    const neonColor = new THREE.Color(0xff2ef7); // pink/magenta neon
+    const neonColor = new THREE.Color(0xff2ef7); // hot pink/magenta
     const neonMeshes = [];
     wrapper.traverse((child) => {
       if (child.isMesh) {
-        child.castShadow = false;
+        child.castShadow = false; // neon tubes are thin — cost outweighs benefit
         child.receiveShadow = false;
         child.material = new THREE.MeshStandardMaterial({
           color: neonColor,
           emissive: neonColor,
-          emissiveIntensity: 6.0,
+          emissiveIntensity: 6.0, // high intensity so it’s clearly self-luminous
           roughness: 0.4,
           metalness: 0.0,
         });
@@ -353,21 +375,21 @@ gltfLoader.load(
     });
     scene.add(wrapper);
 
-    // PointLight to cast neon glow into the room
+    // PointLight: range=8 so the glow falls off before reaching the ceiling
     const neonLight = new THREE.PointLight(0xff2ef7, 6, 8);
     neonLight.position.set(
       wrapper.position.x - 0.3,
       wrapper.position.y,
-      wrapper.position.z + 0.5,
+      wrapper.position.z + 0.5, // slightly in front of the sign
     );
     scene.add(neonLight);
 
-    // Flicker state — accessed by animate loop via window
+    // Flicker state — animate.js reads window._neonFlicker each frame
     window._neonFlicker = {
       light: neonLight,
       meshes: neonMeshes,
-      timer: 0,
-      flickering: false,
+      timer: 0, // frames until next state change
+      flickering: false, // false = quiet period, true = rapid on/off burst
     };
   },
   undefined,
@@ -457,27 +479,27 @@ gltfLoader.load(
     scene.add(wrapper);
     window._curtain.wrapper = wrapper;
 
-    // Soft daylight leaking through the curtain into the room
+    // Soft blue-grey daylight leaking through the curtain fabric
     const curtainLight = new THREE.PointLight(0xb8d4f0, 2.5, 8, 1.8);
     curtainLight.position.set(winCX, winCY, -2.1);
     scene.add(curtainLight);
-    window._curtainLight = curtainLight; // used by thunder flash in animate loop
+    window._curtainLight = curtainLight; // thunder flash in animate.js overrides .intensity
 
     if (gltf.animations && gltf.animations.length > 0) {
       const mixer = new THREE.AnimationMixer(wrapper);
       window._curtainMixer = mixer;
       window._curtain.mixer = mixer;
 
-      // Idle wind sway — loops continuously
+      // "Vento Forte" = strong wind — idle sway that plays on loop continuously
       const windClip =
         gltf.animations.find((a) => a.name === "Armature|Vento Forte") ||
         gltf.animations[0];
       const windAction = mixer.clipAction(windClip);
       windAction.setLoop(THREE.LoopRepeat, Infinity);
       windAction.play();
-      window._curtain.windAction = windAction;
+      window._curtain.windAction = windAction; // stored so controls.js can stop it on open
 
-      // Open clip — triggered on click
+      // "Abrindo" = opening — plays once when the user clicks the curtain
       window._curtain.openClip =
         gltf.animations.find((a) => a.name === "Armature|Abrindo") || null;
     }
@@ -526,6 +548,8 @@ gltfLoader.load(
     const miniTableCenterZ = wrapper.position.z;
 
     // --- Desk Lamp on top of mini table ---
+    // Loaded inside the minitable callback so we can use the computed
+    // miniTableTopY / center values directly, avoiding a second bounding-box query.
     gltfLoader.load(
       "/lamp.glb",
       (gltf2) => {
@@ -567,21 +591,22 @@ gltfLoader.load(
         });
         scene.add(lWrapper);
 
-        // PointLight shining from the lamp shade downward
+        // PointLight shining downward from under the lamp shade
         const tableLight = new THREE.PointLight(0xffaa33, 1.5, 3);
         tableLight.position.set(
           lWrapper.position.x,
-          lWrapper.position.y + lBox2.max.y,
+          lWrapper.position.y + lBox2.max.y, // top of the lamp
           lWrapper.position.z,
         );
-        tableLight.castShadow = false;
+        tableLight.castShadow = false; // small area light — shadow cost not justified
         scene.add(tableLight);
 
+        // Expose for controls.js toggle (on/off switch click interaction)
         window._deskLamp = {
           wrapper: lWrapper,
           light: tableLight,
           meshes: lampMeshes,
-          on: true,
+          on: true, // start on
         };
       },
       undefined,

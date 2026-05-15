@@ -1,55 +1,77 @@
+// controls.js
+// Handles all user interaction: mouse parallax, raycasting, and the pointer
+// (mouse + touch) click handlers for every interactive object in the scene.
+//
+// Exports shared state objects so animate.js and main.js can read them:
+//   camBase     — resting camera position (used for parallax target)
+//   camLookAt   — look-at target Vector3 (lerped each frame in animate.js)
+//   camState    — { transitioning: bool } written here and in main.js
+//   mouse / smoothMouse — raw and smoothed NDC-space mouse position
+//   tvState / computerState / speakerState — per-object interaction phase
+
 import * as THREE from "three";
 import gsap from "gsap";
 import { camera } from "./renderer.js";
-import { lampLight } from "./lights.js";
-import { switchSound, creepAudio } from "./audio.js";
+import { lampLight } from "./lights.js"; // toggled by ceiling lamp click
+import { switchSound, creepAudio } from "./audio.js"; // sounds for lamp toggle and speaker easter egg
 
 // ─────────────────────────────────────────────
 // Camera state
 // ─────────────────────────────────────────────
 
-// Base (resting) camera position — captured from initial camera position
+// Capture camera’s current position as the resting base.
+// This is read here (before main.js sets the intro position to z=10),
+// so it always stores the in-room resting position (1, -1, 5).
 export const camBase = {
   x: camera.position.x,
   y: camera.position.y,
   z: camera.position.z,
 };
 
-// Look target (lerped toward each frame)
+// The camera looks at this point every frame. GSAP tweens it during focus
+// transitions; the animate loop lerps it toward the parallax target when idle.
 export const camLookAt = new THREE.Vector3(0, 0, 0);
 
-// Object so any module can mutate .transitioning by reference
+// Using an object (not a primitive) so any importing module can mutate
+// .transitioning and the change is visible to all other importers.
 export const camState = { transitioning: false };
 
 // ─────────────────────────────────────────────
 // Mouse parallax
 // ─────────────────────────────────────────────
+// Raw mouse position in [-1, 1] NDC range, updated on every mousemove.
 export const mouse = { x: 0, y: 0 };
+// Smoothed version lerped toward mouse each frame in animate.js (factor 0.03).
 export const smoothMouse = { x: 0, y: 0 };
 
 window.addEventListener("mousemove", (e) => {
+  // Map from [0, viewport] to [-1, 1]
   mouse.x = (e.clientX / window.innerWidth - 0.5) * 2;
   mouse.y = (e.clientY / window.innerHeight - 0.5) * 2;
 });
 
 // ─────────────────────────────────────────────
-// Interaction states
+// Per-object interaction states
 // ─────────────────────────────────────────────
-export const tvState = { phase: 0, forward: true };
+// TV and computer use a 3-phase state machine (see handleModelClick below).
+// Speaker uses a 2-phase toggle: 0 = idle, 1 = focused.
+export const tvState = { phase: 0, forward: true }; // forward = play direction
 export const computerState = { phase: 0, forward: true };
 export const speakerState = { phase: 0 };
 
 // ─────────────────────────────────────────────
 // Raycaster
 // ─────────────────────────────────────────────
+// A single shared raycaster re-used for every click check to avoid allocating
+// a new one on each pointer event.
 export const raycaster = new THREE.Raycaster();
-export const clickNDC = new THREE.Vector2();
+export const clickNDC = new THREE.Vector2(); // reusable NDC coordinate for raycasting
 
 // ─────────────────────────────────────────────
-// Helpers
+// Helper functions
 // ─────────────────────────────────────────────
 
-/** Animate camera back to its resting position. */
+/** GSAP tween that flies the camera back to its resting position (camBase). */
 function returnCamera() {
   camState.transitioning = true;
   gsap.killTweensOf(camera.position);
@@ -112,8 +134,11 @@ function handleModelClick(e, modelRef, state) {
 // ─────────────────────────────────────────────
 // Pointer interaction
 // ─────────────────────────────────────────────
+// We use pointerup (not click) so the handler fires on both mouse and touch
+// without needing separate touch event listeners.
 
-// Track pointer-down position to ignore drags
+// Record pointer-down position so we can ignore drags (panning the camera
+// should not accidentally trigger an object interaction).
 let _pointerDownX = 0;
 let _pointerDownY = 0;
 
@@ -123,9 +148,10 @@ window.addEventListener("pointerdown", (e) => {
 });
 
 window.addEventListener("pointerup", (e) => {
-  if (e.button !== 0) return; // primary button only
+  if (e.button !== 0) return; // primary button only (ignore right-click, middle-click)
 
-  // Ignore if pointer was dragged (>10 px)
+  // Drag guard — if the pointer moved more than 10 px, treat as a pan gesture, not a click.
+  // Threshold is distance² (100 = 10px) to avoid a Math.sqrt call.
   const dx = e.clientX - _pointerDownX;
   const dy = e.clientY - _pointerDownY;
   if (dx * dx + dy * dy > 100) return;
@@ -136,12 +162,13 @@ window.addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(clickNDC, camera);
 
   // ── Ceiling lamp toggle ──
+  // Flip the on/off flag and set lampLight intensity 40 (on) or 0 (off).
   if (window._ceilingLamp && window._ceilingLamp.wrapper) {
     if (
       raycaster.intersectObject(window._ceilingLamp.wrapper, true).length > 0
     ) {
       window._ceilingLamp.on = !window._ceilingLamp.on;
-      lampLight.intensity = window._ceilingLamp.on ? 40 : 0;
+      lampLight.intensity = window._ceilingLamp.on ? 40 : 0; // SpotLight on/off
       switchSound.currentTime = 0;
       switchSound.play().catch(() => {});
       return;
@@ -149,13 +176,15 @@ window.addEventListener("pointerup", (e) => {
   }
 
   // ── Desk lamp toggle ──
+  // Toggles both the PointLight intensity AND the emissive on the bulb mesh so
+  // the mesh itself goes dark when off rather than staying bright.
   if (window._deskLamp && window._deskLamp.wrapper) {
     if (raycaster.intersectObject(window._deskLamp.wrapper, true).length > 0) {
       window._deskLamp.on = !window._deskLamp.on;
       const intensity = window._deskLamp.on ? 1.5 : 0;
       window._deskLamp.light.intensity = intensity;
       window._deskLamp.meshes.forEach((m) => {
-        m.material.emissiveIntensity = window._deskLamp.on ? 4.0 : 0;
+        m.material.emissiveIntensity = window._deskLamp.on ? 4.0 : 0; // dim bulb glow
       });
       switchSound.currentTime = 0;
       switchSound.play().catch(() => {});
@@ -164,6 +193,9 @@ window.addEventListener("pointerup", (e) => {
   }
 
   // ── Curtain open ──
+  // One-way interaction — the curtain can only be opened, not closed.
+  // window._curtain.opened is set to true after the first click so this block
+  // is skipped on all subsequent clicks.
   if (window._curtain && window._curtain.wrapper && !window._curtain.opened) {
     if (raycaster.intersectObject(window._curtain.wrapper, true).length > 0) {
       if (window._curtain.openClip && window._curtain.mixer) {
@@ -173,10 +205,10 @@ window.addEventListener("pointerup", (e) => {
           window._curtain.openClip,
         );
         openAction.setLoop(THREE.LoopOnce, 1);
-        openAction.clampWhenFinished = true;
+        openAction.clampWhenFinished = true; // hold last keyframe after clip ends
         openAction.reset();
         openAction.play();
-        window._curtain.opened = true;
+        window._curtain.opened = true; // prevent re-triggering
       }
       return;
     }
@@ -305,6 +337,8 @@ window.addEventListener("pointerup", (e) => {
   }
 
   // ── Speaker (plays creepAudio on click) ──
+  // Phase 0 → 1: focus camera on speaker.
+  // Phase 1 → 0: play the hidden creep audio easter egg, then return camera.
   if (window._speaker && window._speaker.wrapper) {
     if (raycaster.intersectObject(window._speaker.wrapper, true).length > 0) {
       if (speakerState.phase === 0) {
@@ -343,6 +377,8 @@ window.addEventListener("pointerup", (e) => {
   }
 
   // ── Click anywhere else while a focus is active → return camera ──
+  // Catches clicks on the floor, ceiling, or empty air while the camera is
+  // pointed at a focused object.
   if (!camState.transitioning) {
     if (
       tvState.phase !== 0 ||

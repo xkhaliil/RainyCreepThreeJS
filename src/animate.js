@@ -1,3 +1,12 @@
+// animate.js
+// The main render loop. Runs every animation frame and:
+//   1. Smooths mouse parallax into the camera position
+//   2. Drives the neon sign flicker effect
+//   3. Runs the procedural thunder flash sequence
+//   4. Advances GLTF animation mixers (curtain, TV, computer)
+//   5. Updates the GPU rain shader time uniform
+//   6. Calls composer.render() to execute the full post-processing pipeline
+
 import * as THREE from "three";
 import { camera, composer, stats } from "./renderer.js";
 import { rainMesh } from "./room.js";
@@ -13,6 +22,8 @@ import {
   speakerState,
 } from "./controls.js";
 
+// Three.js clock — used for getDelta() (per-frame seconds) and elapsedTime
+// (total seconds, written to the rain shader’s uTime uniform).
 const clock = new THREE.Clock();
 
 // ─────────────────────────────────────────────
@@ -125,17 +136,29 @@ export function animate() {
     }
   }
 
-  // ── Animation mixers ──
-  if (window._curtainMixer) window._curtainMixer.update(delta);
+  // ─────────────────────────────────
+  // GLTF animation mixers
+  // ─────────────────────────────────
+  // Each mixer only exists once the corresponding GLB has loaded.
+  // Null-checking here avoids errors during the loading screen phase.
+  if (window._curtainMixer) window._curtainMixer.update(delta); // idle wind sway / open clip
   if (window._tv && window._tv.mixer) window._tv.mixer.update(delta);
   if (window._computer && window._computer.mixer)
     window._computer.mixer.update(delta);
 
-  // ── GPU rain shader time ──
+  // ─────────────────────────────────
+  // GPU rain shader time
+  // ─────────────────────────────────
+  // This is the only per-frame CPU→GPU data transfer for rain. All streak
+  // positions are computed entirely in the vertex shader using this single float.
   rainMesh.material.uniforms.uTime.value = clock.elapsedTime;
 
-  // ── Render ──
+  // ─────────────────────────────────
+  // Render
+  // ─────────────────────────────────
+  // stats.begin/end bracket the render call so the FPS panel reflects actual
+  // render time rather than the whole frame including JS logic.
   stats.begin();
-  composer.render();
+  composer.render(); // executes: RenderPass → Bloom → OutputPass → SMAA
   stats.end();
 }

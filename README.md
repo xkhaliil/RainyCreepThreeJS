@@ -106,15 +106,15 @@ A full-screen overlay with a neon-pink aesthetic covers the scene while assets l
 
 All interactions use `pointerup` (not `click`) for reliable response on both mouse and iOS touch. A 10 px drag guard prevents accidental fires when scrolling on mobile.
 
-| Action                   | Effect                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| Click ceiling lamp model | Toggles `SpotLight` on/off, plays switch sound                   |
-| Click desk lamp model    | Toggles desk `PointLight` + emissive on/off, plays switch sound  |
-| Click curtain            | Plays open animation clip; idle wind sway stops                  |
-| Click TV                 | GSAP camera focus on TV, plays GLB animation forward/reverse     |
+| Action                   | Effect                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| Click ceiling lamp model | Toggles `SpotLight` on/off, plays switch sound                     |
+| Click desk lamp model    | Toggles desk `PointLight` + emissive on/off, plays switch sound    |
+| Click curtain            | Plays open animation clip; idle wind sway stops                    |
+| Click TV                 | GSAP camera focus on TV, plays GLB animation forward/reverse       |
 | Click computer           | GSAP camera focus on computer, plays GLB animation forward/reverse |
-| Click speaker            | GSAP camera focus on speaker; second click plays _Creep_ audio   |
-| Mouse move               | Subtle parallax — camera position and look-at follow the cursor  |
+| Click speaker            | GSAP camera focus on speaker; second click plays _Creep_ audio     |
+| Mouse move               | Subtle parallax — camera position and look-at follow the cursor    |
 
 Thunder strikes fire automatically on a 15–45 second random timer: the curtain `PointLight` spikes to intensity 900 for a double-flash, then decays over ~0.4 s. Thunder audio plays 1.6–2.4 s after the visual flash.
 
