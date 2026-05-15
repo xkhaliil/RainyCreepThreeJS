@@ -272,7 +272,12 @@ creepAudio.preload = "auto";
 const _unlockAudio = () => {
   [rainAudio, switchSound].forEach((a) => {
     a.play()
-      .then(() => { if (a !== rainAudio) { a.pause(); a.currentTime = 0; } })
+      .then(() => {
+        if (a !== rainAudio) {
+          a.pause();
+          a.currentTime = 0;
+        }
+      })
       .catch(() => {});
   });
   window.removeEventListener("click", _unlockAudio);
@@ -1009,7 +1014,9 @@ window.addEventListener("click", (e) => {
 
   // --- Ceiling lamp toggle ---
   if (window._ceilingLamp && window._ceilingLamp.wrapper) {
-    if (raycaster.intersectObject(window._ceilingLamp.wrapper, true).length > 0) {
+    if (
+      raycaster.intersectObject(window._ceilingLamp.wrapper, true).length > 0
+    ) {
       window._ceilingLamp.on = !window._ceilingLamp.on;
       lampLight.intensity = window._ceilingLamp.on ? 40 : 0;
       switchSound.currentTime = 0;
@@ -1084,7 +1091,9 @@ window.addEventListener("click", (e) => {
           console.warn("creep play failed (retrying):", err);
           creepAudio.src = "/creep.mp3?v=" + Date.now();
           creepAudio.load();
-          creepAudio.play().catch((err2) => console.error("creep retry failed:", err2));
+          creepAudio
+            .play()
+            .catch((err2) => console.error("creep retry failed:", err2));
         });
       } else {
         creepAudio.pause();
@@ -1097,7 +1106,12 @@ window.addEventListener("click", (e) => {
     handleModelClick(e, window._tv, tvState, null);
     if (tvState.phase === 0)
       handleModelClick(e, window._computer, computerState, null);
-    if (tvState.phase === 0 && computerState.phase === 0 && window._speaker && window._speaker.wrapper) {
+    if (
+      tvState.phase === 0 &&
+      computerState.phase === 0 &&
+      window._speaker &&
+      window._speaker.wrapper
+    ) {
       if (raycaster.intersectObject(window._speaker.wrapper, true).length > 0)
         speakerState.phase = 1;
     }
@@ -1110,7 +1124,7 @@ const clock = new THREE.Clock();
 // --- Thunder state ---
 const thunder = {
   nextStrike: 10 + Math.random() * 20, // seconds until first strike
-  phase: "idle",   // 'idle' | 'flashing'
+  phase: "idle", // 'idle' | 'flashing'
   elapsed: 0,
   baseIntensity: 2.5,
 };
@@ -1228,10 +1242,16 @@ function animate() {
       const t = thunder.elapsed;
       let fl = thunder.baseIntensity;
       // Two quick white-blue flashes then fade
-      if      (t < 0.06)  fl = 900;
-      else if (t < 0.14)  fl = THREE.MathUtils.lerp(900, thunder.baseIntensity, (t - 0.06) / 0.08);
-      else if (t < 0.22)  fl = 500;
-      else if (t < 0.42)  fl = THREE.MathUtils.lerp(500, thunder.baseIntensity, (t - 0.22) / 0.20);
+      if (t < 0.06) fl = 900;
+      else if (t < 0.14)
+        fl = THREE.MathUtils.lerp(
+          900,
+          thunder.baseIntensity,
+          (t - 0.06) / 0.08,
+        );
+      else if (t < 0.22) fl = 500;
+      else if (t < 0.42)
+        fl = THREE.MathUtils.lerp(500, thunder.baseIntensity, (t - 0.22) / 0.2);
       else {
         fl = thunder.baseIntensity;
         thunder.phase = "idle";
