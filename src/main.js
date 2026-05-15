@@ -3,6 +3,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import Stats from "stats.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import rainVertexShader from "./shaders/rainVertex.js";
+import rainFragShader from "./shaders/rainFrag.js";
 
 const scene = new THREE.Scene();
 
@@ -14,6 +20,7 @@ const exrLoader = new EXRLoader();
 exrLoader.load("/DaySkyHDRI020A.exr", (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = texture;
+  scene.environment = pmremGenerator.fromEquirectangular(texture).texture;
 });
 
 const camera = new THREE.PerspectiveCamera(
@@ -30,26 +37,45 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
 
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
-const roomEnvTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+
+// --- Post-processing ---
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(
+  new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.4, // strength — subtle
+    0.5, // radius
+    0.9, // threshold — only very bright emissives catch bloom
+  ),
+);
+composer.addPass(new OutputPass());
 
 const textureLoader = new THREE.TextureLoader();
 
 const floorTexture = textureLoader.load("/floor_texture.jpg");
+floorTexture.colorSpace = THREE.SRGBColorSpace;
 floorTexture.wrapS = THREE.RepeatWrapping;
 floorTexture.wrapT = THREE.RepeatWrapping;
 floorTexture.repeat.set(4, 4);
 
 const wallTexture = textureLoader.load("/wall texture.jpg");
+wallTexture.colorSpace = THREE.SRGBColorSpace;
 wallTexture.repeat.set(1, 1);
 
 const ceilingTexture = textureLoader.load("/ceilingtexture.jpg");
+ceilingTexture.colorSpace = THREE.SRGBColorSpace;
 ceilingTexture.wrapS = THREE.RepeatWrapping;
 ceilingTexture.wrapT = THREE.RepeatWrapping;
 ceilingTexture.repeat.set(3, 3);
 
 const graffitiTexture = textureLoader.load("/graffiti_texture.jpg");
+graffitiTexture.colorSpace = THREE.SRGBColorSpace;
 graffitiTexture.wrapS = THREE.RepeatWrapping;
 graffitiTexture.wrapT = THREE.RepeatWrapping;
 graffitiTexture.repeat.set(1, 1);
@@ -201,6 +227,7 @@ scene.add(sill);
 
 // Sky visible through the window — use background.png
 const bgTexture = textureLoader.load("/background.png");
+bgTexture.colorSpace = THREE.SRGBColorSpace;
 // Shift texture up so skyscrapers sit at the bottom, sky fills top
 bgTexture.offset.set(0, 0.15);
 bgTexture.repeat.set(1, 1);
@@ -213,40 +240,57 @@ const skyPlane = new THREE.Mesh(
 skyPlane.position.set(winCX, winCY - 0.2, -4.5);
 scene.add(skyPlane);
 
-// --- Rain outside window ---
+// --- Rain outside window (GPU-animated) ---
 const rainCount = 1600;
-const rainVerts = new Float32Array(rainCount * 2 * 3);
-const rainSpeeds = new Float32Array(rainCount);
 const rainXMin = winCX - winW * 1.4;
 const rainXMax = winCX + winW * 1.4;
 const rainYTop = winCY + winH * 1.2;
 const rainYBot = winCY - winH * 1.8;
 const rainZMin = -3.6;
 const rainZMax = -7.0;
-const streakLen = 0.38; // longer streaks
-const windDrift = 0.12; // consistent wind angle
+const streakLen = 0.38;
+const windDrift = 0.12;
+
+const rainPositions = new Float32Array(rainCount * 2 * 3);
+const rainASpeed = new Float32Array(rainCount * 2);
+const rainADy = new Float32Array(rainCount * 2);
 for (let i = 0; i < rainCount; i++) {
   const x = rainXMin + Math.random() * (rainXMax - rainXMin);
   const y = rainYBot + Math.random() * (rainYTop - rainYBot);
   const z = rainZMin + Math.random() * (rainZMax - rainZMin);
-  rainVerts[i * 6 + 0] = x + windDrift; // top (wind-shifted)
-  rainVerts[i * 6 + 1] = y;
-  rainVerts[i * 6 + 2] = z;
-  rainVerts[i * 6 + 3] = x;
-  rainVerts[i * 6 + 4] = y - streakLen;
-  rainVerts[i * 6 + 5] = z;
-  rainSpeeds[i] = 0.18 + Math.random() * 0.1; // very fast
+  const speed = 10.8 + Math.random() * 6.0;
+  // top vertex — windDrift baked into x
+  rainPositions[i * 6 + 0] = x + windDrift;
+  rainPositions[i * 6 + 1] = y;
+  rainPositions[i * 6 + 2] = z;
+  rainASpeed[i * 2] = speed;
+  rainADy[i * 2] = 0.0;
+  // bottom vertex
+  rainPositions[i * 6 + 3] = x;
+  rainPositions[i * 6 + 4] = y;
+  rainPositions[i * 6 + 5] = z;
+  rainASpeed[i * 2 + 1] = speed;
+  rainADy[i * 2 + 1] = -streakLen;
 }
 const rainGeo = new THREE.BufferGeometry();
-const rainPosAttr = new THREE.BufferAttribute(rainVerts, 3);
-rainPosAttr.setUsage(THREE.DynamicDrawUsage);
-rainGeo.setAttribute("position", rainPosAttr);
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+rainGeo.setAttribute("aSpeed", new THREE.BufferAttribute(rainASpeed, 1));
+rainGeo.setAttribute("aDy", new THREE.BufferAttribute(rainADy, 1));
 const rainMesh = new THREE.LineSegments(
   rainGeo,
-  new THREE.LineBasicMaterial({
-    color: 0xc8e0ff,
+  new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0.0 },
+      uRainYBot: { value: rainYBot },
+      uRainYTop: { value: rainYTop },
+      uStreakLen: { value: streakLen },
+      uColor: { value: new THREE.Color(0xc8e0ff) },
+      uOpacity: { value: 0.35 },
+    },
+    vertexShader: rainVertexShader,
+    fragmentShader: rainFragShader,
     transparent: true,
-    opacity: 0.35,
+    depthWrite: false,
   }),
 );
 scene.add(rainMesh);
@@ -926,7 +970,7 @@ gltfLoader.load(
           lWrapper.position.y + lBox2.max.y,
           lWrapper.position.z,
         );
-        tableLight.castShadow = true;
+        tableLight.castShadow = false;
         scene.add(tableLight);
 
         window._deskLamp = {
@@ -949,6 +993,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // --- Mouse parallax ---
@@ -1268,26 +1313,11 @@ function animate() {
   if (window._computer && window._computer.mixer)
     window._computer.mixer.update(delta);
 
-  // Animate rain
-  const rp = rainMesh.geometry.attributes.position;
-  for (let i = 0; i < rainCount; i++) {
-    const topY = rp.getY(i * 2);
-    const spd = rainSpeeds[i];
-    if (topY - streakLen < rainYBot) {
-      const nx = rainXMin + Math.random() * (rainXMax - rainXMin);
-      const nz = rainZMin + Math.random() * (rainZMax - rainZMin);
-      rp.setXYZ(i * 2, nx + windDrift, rainYTop + Math.random() * 0.5, nz);
-      rp.setXYZ(i * 2 + 1, nx, rainYTop + Math.random() * 0.5 - streakLen, nz);
-    } else {
-      rp.setY(i * 2, topY - spd);
-      rp.setY(i * 2 + 1, rp.getY(i * 2 + 1) - spd);
-    }
-  }
-  rp.needsUpdate = true;
-
-  stats.begin();
-  renderer.render(scene, camera);
-  stats.end();
+  // Update rain time uniform — all animation runs on GPU
+  rainMesh.material.uniforms.uTime.value = clock.elapsedTime;
   requestAnimationFrame(animate);
+  stats.begin();
+  composer.render();
+  stats.end();
 }
 animate();
