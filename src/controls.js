@@ -54,10 +54,12 @@ window.addEventListener("mousemove", (e) => {
 // Per-object interaction states
 // ─────────────────────────────────────────────
 // TV and computer use a 3-phase state machine (see handleModelClick below).
-// Speaker uses a 2-phase toggle: 0 = idle, 1 = focused.
+// Speaker uses a multi-phase cycle that depends on whether music is already playing.
+//   playing=false: phase 0→focus, phase 1→play+return camera, music persists.
+//   playing=true:  phase 0→focus, phase 1→pause, phase 2→return camera.
 export const tvState = { phase: 0, forward: true }; // forward = play direction
 export const computerState = { phase: 0, forward: true };
-export const speakerState = { phase: 0 };
+export const speakerState = { phase: 0, playing: false };
 
 // ─────────────────────────────────────────────
 // Raycaster
@@ -227,9 +229,9 @@ window.addEventListener("pointerup", (e) => {
       gsap.killTweensOf(camLookAt);
       const tvPos = window._tv.wrapper.position;
       gsap.to(camera.position, {
-        x: tvPos.x - 2,
+        x: tvPos.x,
         y: tvPos.y + 0.5,
-        z: tvPos.z + 1.5,
+        z: tvPos.z + 3,
         duration: 1.2,
         ease: "power2.inOut",
         onComplete: () => {
@@ -255,9 +257,9 @@ window.addEventListener("pointerup", (e) => {
         gsap.killTweensOf(camLookAt);
         const tvPos = window._tv.wrapper.position;
         gsap.to(camera.position, {
-          x: tvPos.x - 2,
+          x: tvPos.x,
           y: tvPos.y + 0.5,
-          z: tvPos.z + 1.5,
+          z: tvPos.z + 3,
           duration: 1.2,
           ease: "power2.inOut",
           onComplete: () => {
@@ -336,9 +338,15 @@ window.addEventListener("pointerup", (e) => {
     }
   }
 
-  // ── Speaker (plays creepAudio on click) ──
-  // Phase 0 → 1: focus camera on speaker.
-  // Phase 1 → 0: play the hidden creep audio easter egg, then return camera.
+  // ── Speaker ──
+  // When music is NOT playing:
+  //   click 1 → focus camera (phase 0→1)
+  //   click 2 → start music + return camera to default (phase 1→0, playing=true)
+  //            music keeps playing freely in the background.
+  // When music IS playing:
+  //   click 1 → focus camera (phase 0→1)
+  //   click 2 → pause music (phase 1→2)
+  //   click 3 → return camera (phase 2→0)
   if (window._speaker && window._speaker.wrapper) {
     if (raycaster.intersectObject(window._speaker.wrapper, true).length > 0) {
       if (speakerState.phase === 0) {
@@ -365,10 +373,22 @@ window.addEventListener("pointerup", (e) => {
           ease: "power2.inOut",
         });
         speakerState.phase = 1;
+      } else if (speakerState.phase === 1) {
+        if (!speakerState.playing) {
+          // Start music and return camera — music keeps playing after camera leaves
+          creepAudio.currentTime = 0;
+          creepAudio.play().catch(() => {});
+          speakerState.playing = true;
+          returnCamera();
+          speakerState.phase = 0;
+        } else {
+          // Pause music, stay focused
+          creepAudio.pause();
+          speakerState.playing = false;
+          speakerState.phase = 2;
+        }
       } else {
-        // Play the easter-egg track
-        creepAudio.currentTime = 0;
-        creepAudio.play().catch(() => {});
+        // Phase 2: return camera (audio stays paused)
         returnCamera();
         speakerState.phase = 0;
       }
@@ -385,6 +405,8 @@ window.addEventListener("pointerup", (e) => {
       computerState.phase !== 0 ||
       speakerState.phase !== 0
     ) {
+      // Note: do NOT touch creepAudio here — music should keep playing
+      // even after the camera returns to default.
       returnCamera();
       tvState.phase = 0;
       computerState.phase = 0;
