@@ -52,11 +52,27 @@ The HDRI (`DaySkyHDRI020A.exr`) is used only for image-based _reflections_ (`sce
 
 ## Model Optimisation
 
-No geometry was decimated or re-exported. All GLB files are loaded as-is. The optimisations that were applied at runtime:
+### Asset Compression
+
+All 12 GLB files were processed offline with `@gltf-transform/cli` before being committed to the repo. The pipeline applied to every file was: **dedup** (remove duplicate meshes/materials/textures), **weld** (merge coincident vertices), **simplify** (lossless triangle reduction), **Draco geometry compression** (`KHR_draco_mesh_compression`), and **WebP texture re-encoding** for files with embedded textures. Total asset weight dropped from **27.8 MB → 3.1 MB (89% reduction)**.
+
+At runtime the `GLTFLoader` is paired with a `DRACOLoader` pointed at `/draco/` (Three.js decoder WASM served from `public/draco/`). Draco decompression runs off the main thread and is transparent to the rest of the code.
+
+### Runtime placement
 
 - Every model is wrapped in a `Group`, its bounding box computed, and then scaled to a target world-space size. This avoids needing to pre-process models in Blender just to normalise scale.
 - Shadow casting is disabled on the ceiling lamp and neon sign meshes — they are small, high up, and self-shadowing them added no visible value.
 - The neon sign emissive (`emissiveIntensity: 6.0`), computer screen (`4.0`), and desk lamp (`4.0`) are all high enough to trigger bloom without needing any per-object layer override (see Bloom section).
+
+---
+
+## Raycasting & BVH
+
+All pointer interactions use a single shared `THREE.Raycaster`. To accelerate intersection tests against the GLTF meshes, **three-mesh-bvh** is integrated:
+
+- `THREE.BufferGeometry.prototype.computeBoundsTree` and `THREE.Mesh.prototype.raycast` are patched globally in `models.js`.
+- `geometry.computeBoundsTree({ strategy: SAH })` is called on every mesh inside each model's `traverse` callback, immediately after load. **SAH (Surface Area Heuristic)** builds a statistically optimal BVH tree that minimises the expected number of node traversals per raycast — at the cost of a slightly slower one-time build.
+- `raycaster.firstHitOnly = true` is set in `controls.js` so click-picking exits after the first hit rather than collecting all intersections.
 
 ---
 
@@ -126,6 +142,13 @@ Thunder strikes fire automatically on a 15–45 second random timer: the curtain
 - `viewport-fit=cover` in the `<meta>` tag handles the iPhone notch/home-bar safe area.
 - `touch-action: none` on the canvas prevents scroll interference.
 - `visualViewport.resize` listener alongside `window.resize` keeps the renderer correct when the iOS address bar shows or hides.
+
+---
+
+## Render Loop Optimisations
+
+- **Zero per-frame allocations** — the `Vector3` used for the camera look-at drift target was originally constructed inside `animate()` every frame. It is now a module-level constant updated with `.set()`, eliminating GC pressure.
+- **`powerPreference: "high-performance"`** on the `WebGLRenderer` constructor — instructs the OS and browser to select the discrete GPU over integrated graphics on dual-GPU machines (most modern laptops).
 
 ---
 
