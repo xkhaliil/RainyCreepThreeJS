@@ -67,6 +67,7 @@ export const speakerState = { phase: 0, playing: false };
 // A single shared raycaster re-used for every click check to avoid allocating
 // a new one on each pointer event.
 export const raycaster = new THREE.Raycaster();
+raycaster.firstHitOnly = true; // three-mesh-bvh: stop after the first BVH hit
 export const clickNDC = new THREE.Vector2(); // reusable NDC coordinate for raycasting
 
 // ─────────────────────────────────────────────

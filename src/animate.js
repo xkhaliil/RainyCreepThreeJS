@@ -25,7 +25,9 @@ import {
 // Three.js clock — used for getDelta() (per-frame seconds) and elapsedTime
 // (total seconds, written to the rain shader’s uTime uniform).
 const clock = new THREE.Clock();
-
+// Reusable Vector3 for the look-at drift target — hoisted out of the loop
+// so the GC doesn't collect a new allocation every frame.
+const _lookTarget = new THREE.Vector3();
 // ─────────────────────────────────────────────
 // Thunder state
 // ─────────────────────────────────────────────
@@ -61,12 +63,8 @@ export function animate() {
     camera.position.z += (camBase.z - camera.position.z) * 0.03;
 
     // Subtle look-at drift
-    const lookTarget = new THREE.Vector3(
-      smoothMouse.x * 0.6,
-      -smoothMouse.y * 0.3,
-      0,
-    );
-    camLookAt.lerp(lookTarget, 0.05);
+    _lookTarget.set(smoothMouse.x * 0.6, -smoothMouse.y * 0.3, 0);
+    camLookAt.lerp(_lookTarget, 0.05);
   }
   camera.lookAt(camLookAt);
 

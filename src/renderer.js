@@ -8,6 +8,7 @@ import * as THREE from "three";
 import Stats from "stats.js"; // lightweight FPS / memory panel
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js"; // high-dynamic-range HDRI
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"; // 3D model loader
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js"; // Draco mesh decompressor
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js"; // render pipeline
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js"; // base scene pass
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js"; // glow on bright emissives
@@ -71,7 +72,11 @@ camera.position.set(1, -1, 5); // resting position (slightly right and low)
 // over (it renders to an off-screen RT), but it's kept as a safety net in case
 // the composer is ever bypassed during debugging.
 const canvas = document.getElementById("webgl");
-export const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+export const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  powerPreference: "high-performance", // prefer discrete GPU on dual-GPU systems
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
 // Cap pixel ratio at 2 — retina screens beyond 2× offer no visible benefit
 // but double (or quadruple) the fragment work.
@@ -134,7 +139,10 @@ composer.addPass(
 // Passing loadingManager to each loader registers them with the aggregated
 // progress/complete callbacks defined above.
 export const textureLoader = new THREE.TextureLoader(loadingManager);
+const _dracoLoader = new DRACOLoader();
+_dracoLoader.setDecoderPath("/draco/"); // decoder WASM served from public/draco/
 export const gltfLoader = new GLTFLoader(loadingManager);
+gltfLoader.setDRACOLoader(_dracoLoader);
 
 // --- EXR Environment map (IBL + background) ---
 // The HDRI is used for two purposes:

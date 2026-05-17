@@ -12,8 +12,20 @@
 //   5. Position the group in world space (snap to floor, wall, etc.)
 
 import * as THREE from "three";
+import {
+  computeBoundsTree,
+  disposeBoundsTree,
+  acceleratedRaycast,
+  SAH,
+} from "three-mesh-bvh";
 import { scene, gltfLoader } from "./renderer.js";
 import { winCX, winCY, winH } from "./room.js"; // needed for curtain placement
+
+// Patch Three.js prototypes once so every BufferGeometry can build a BVH
+// and every Mesh uses the accelerated raycast path automatically.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 // ─────────────────────────────────────────────
 // Ceiling Lamp
@@ -50,6 +62,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = false;
         child.receiveShadow = false;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -91,6 +104,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -140,6 +154,7 @@ gltfLoader.load(
           child.material.emissive = new THREE.Color(0x88ccff);
           child.material.emissiveIntensity = 4.0;
         }
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -205,6 +220,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -241,6 +257,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -278,6 +295,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -316,6 +334,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -371,6 +390,7 @@ gltfLoader.load(
           metalness: 0.0,
         });
         neonMeshes.push(child);
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -430,6 +450,7 @@ gltfLoader.load(
         if (child.material) {
           child.material.color.multiplyScalar(0.25);
         }
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -474,6 +495,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -538,6 +560,7 @@ gltfLoader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.geometry.computeBoundsTree({ strategy: SAH });
       }
     });
     scene.add(wrapper);
@@ -587,6 +610,7 @@ gltfLoader.load(
               metalness: 0.1,
             });
             lampMeshes.push(child);
+            child.geometry.computeBoundsTree({ strategy: SAH });
           }
         });
         scene.add(lWrapper);
